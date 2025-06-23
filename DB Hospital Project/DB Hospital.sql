@@ -305,60 +305,207 @@ INSERT INTO Rooms (Room_Num, R_Type, Availability) VALUES
 
 -- Track which patients are admitted in which rooms and when
 INSERT INTO AdmissionStay (Admission_ID, P_ID, Room_Num, DateIn, DateOut) VALUES
-(1, 1, 101, '2024-06-15', NULL),   
-(2, 3, 104, '2024-06-20', NULL),   
-(3, 5, 103, '2024-06-10', '2024-06-15'),
-(4, 6, 105, '2024-06-22', NULL),
-(5, 7, 106, '2024-06-23', NULL);
+(1, 1, 107, '2025-05-26', NULL),
+(2, 2, 101, '2025-06-18', NULL),
+(3, 3, 103, '2025-06-11', '2025-06-17'),
+(4, 4, 118, '2025-06-07', '2025-06-10'),
+(5, 5, 110, '2025-06-07', NULL),
+(6, 6, 111, '2025-06-11', '2025-06-15'),
+(7, 7, 126, '2025-05-30', NULL),
+(8, 8, 117, '2025-06-18', NULL),
+(9, 9, 127, '2025-06-09', NULL),
+(10, 10, 102, '2025-06-18', NULL),
+(11, 11, 121, '2025-05-29', '2025-06-06'),
+(12, 12, 109, '2025-06-21', '2025-06-22'),
+(13, 13, 110, '2025-06-13', NULL),
+(14, 14, 118, '2025-05-27', '2025-06-02'),
+(15, 15, 111, '2025-06-15', NULL),
+(16, 16, 108, '2025-05-25', NULL),
+(17, 17, 103, '2025-06-09', '2025-06-19'),
+(18, 18, 121, '2025-06-14', NULL),
+(19, 19, 112, '2025-06-07', NULL),
+(20, 20, 120, '2025-06-13', '2025-06-22'),
+(21, 21, 128, '2025-05-25', NULL),
+(22, 22, 123, '2025-05-31', NULL),
+(23, 23, 112, '2025-06-18', NULL),
+(24, 24, 121, '2025-06-08', '2025-06-20'),
+(25, 25, 124, '2025-06-17', '2025-06-20'),
+(26, 26, 121, '2025-05-30', NULL),
+(27, 27, 106, '2025-06-09', NULL),
+(28, 28, 127, '2025-06-17', '2025-06-17'),
+(29, 29, 121, '2025-06-19', '2025-06-21'),
+(30, 30, 108, '2025-06-03', '2025-06-16');
+
 
 -- Scheduled appointments between patients and doctors
 INSERT INTO AppointmentsLink (Appointment_ID, P_ID, D_ID, Ap_DateTime) VALUES
-(1, 2, 2, '2024-07-01 10:00:00'),  
-(2, 3, 3, '2024-06-25 09:30:00'),  
-(3, 4, 1, '2024-06-28 14:00:00'),
-(4, 5, 4, '2024-06-30 11:00:00'),
-(5, 6, 5, '2024-07-02 08:30:00'),
-(6, 7, 6, '2024-07-03 12:00:00'),
-(7, 8, 4, '2024-07-04 09:15:00');
+(1, 1, 10, '2025-06-29 16:01:30'),
+(2, 2, 21, '2025-07-23 03:30:43'),
+(3, 3, 25, '2025-06-23 20:02:43'),
+(4, 4, 13, '2025-07-22 17:32:47'),
+(5, 5, 23, '2025-07-23 02:49:15'),
+(6, 6, 6, '2025-07-17 13:12:19'),
+(7, 7, 27, '2025-07-10 05:11:04'),
+(8, 8, 19, '2025-07-21 22:14:13'),
+(9, 9, 14, '2025-06-29 11:36:34'),
+(10, 10, 6, '2025-06-26 02:11:32'),
+(11, 11, 11, '2025-07-11 01:17:00'),
+(12, 12, 8, '2025-07-15 21:55:36'),
+(13, 13, 12, '2025-07-11 02:40:34'),
+(14, 14, 18, '2025-07-13 23:19:25'),
+(15, 15, 24, '2025-07-08 20:41:33'),
+(16, 16, 19, '2025-07-10 22:58:56'),
+(17, 17, 19, '2025-07-04 01:27:05'),
+(18, 18, 22, '2025-07-15 08:16:41'),
+(19, 19, 2, '2025-07-10 04:45:48'),
+(20, 20, 6, '2025-07-02 21:20:41'),
+(21, 21, 25, '2025-07-02 07:36:13'),
+(22, 22, 14, '2025-07-12 02:35:57'),
+(23, 23, 21, '2025-06-26 13:51:04'),
+(24, 24, 11, '2025-07-13 16:17:35'),
+(25, 25, 25, '2025-07-11 18:23:52'),
+(26, 26, 15, '2025-07-17 20:11:46'),
+(27, 27, 26, '2025-07-06 10:24:23'),
+(28, 28, 23, '2025-07-02 00:50:57'),
+(29, 29, 4, '2025-07-20 16:25:06'),
+(30, 30, 1, '2025-07-11 19:38:37');
+
 
 -- Medical records showing diagnosis and Treatment plan
 INSERT INTO MedicalRecords (MR_ID, P_ID, D_ID, Date, Treatment_Plans, Notes, Diagnosis) VALUES
-(1, 1, 1, '2024-06-16', 'Cardiac Monitoring', 'Stable condition', 'Heart Arrhythmia'),
-(2, 3, 3, '2024-06-21', 'Emergency scan and IV', 'Discharged stable', 'Minor trauma'),
-(3, 5, 4, '2024-06-15', 'Pediatric checkup and vaccines', 'Normal growth', 'Routine Checkup'),
-(4, 6, 5, '2024-06-23', 'Blood pressure monitoring', 'Moderate hypertension', 'Hypertension Stage 1'),
-(5, 7, 6, '2024-06-24', 'Appendectomy', 'Post-surgery stable', 'Appendicitis'),
-(6, 8, 4, '2024-06-25', 'Child vaccine + general check', 'Mild fever', 'Routine Pediatric Care');
+(1, 1, 1, '2025-06-16', 'Fracture assessment', 'Tv business enter star.', 'Hypertension'),
+(2, 2, 13, '2025-06-15', 'Appendectomy', 'Want appear home blue.', 'Routine Immunization'),
+(3, 3, 23, '2025-06-21', 'Appendectomy', 'Drug knowledge subject none general we.', 'Routine Immunization'),
+(4, 4, 11, '2025-06-19', 'X-ray & report', 'Offer type front any but into market.', 'Stable vitals'),
+(5, 5, 8, '2025-06-11', 'X-ray & report', 'Movement like my for have walk our.', 'Suspected fracture'),
+(6, 6, 15, '2025-06-08', 'Blood pressure monitoring', 'Mean training over watch relationship too add.', 'Hypertension'),
+(7, 7, 3, '2025-06-17', 'Diabetes consultation', 'Read artist effect collection indeed.', 'Suspected fracture'),
+(8, 8, 16, '2025-06-18', 'Cardiac screening', 'Parent market clearly.', 'Type 2 Diabetes'),
+(9, 9, 5, '2025-06-09', 'Vaccination', 'Modern shake until style few.', 'Infection'),
+(10, 10, 24, '2025-06-19', 'Wound dressing', 'Executive begin kind nation evidence.', 'Sprained ankle'),
+(11, 11, 22, '2025-06-12', 'Fracture assessment', 'Wait attack vote image social book now.', 'Suspected fracture'),
+(12, 12, 4, '2025-06-18', 'Minor surgery', 'Ground manage create deep drop also travel.', 'Appendicitis'),
+(13, 13, 15, '2025-06-09', 'Appendectomy', 'Until action prevent natural among walk.', 'Arrhythmia'),
+(14, 14, 28, '2025-06-18', 'Appendectomy', 'Until fight executive poor foot.', 'Routine Immunization'),
+(15, 15, 30, '2025-06-20', 'Wound dressing', 'Security skill letter.', 'Sprained ankle'),
+(16, 16, 18, '2025-06-18', 'X-ray & report', 'Member turn hospital country baby.', 'Type 2 Diabetes'),
+(17, 17, 5, '2025-06-20', 'X-ray & report', 'Expert little result.', 'Suspected fracture'),
+(18, 18, 8, '2025-06-10', 'Vaccination', 'Business unit good pass.', 'Appendicitis'),
+(19, 19, 28, '2025-06-18', 'General checkup', 'Good guy hospital another meet those believe.', 'Sprained ankle'),
+(20, 20, 10, '2025-06-15', 'Appendectomy', 'Sister day his industry.', 'Suspected fracture'),
+(21, 21, 8, '2025-06-19', 'Blood pressure monitoring', 'Surface accept small beat.', 'Stable vitals'),
+(22, 22, 12, '2025-06-08', 'Cardiac screening', 'Chair leader view product.', 'Appendicitis'),
+(23, 23, 8, '2025-06-09', 'Diabetes consultation', 'Charge leave bed property.', 'Stable vitals'),
+(24, 24, 1, '2025-06-16', 'Appendectomy', 'What standard stage dog issue public.', 'Stable vitals'),
+(25, 25, 3, '2025-06-10', 'Diabetes consultation', 'Factor protect generation.', 'Type 2 Diabetes'),
+(26, 26, 13, '2025-06-13', 'X-ray & report', 'Around ask under explain.', 'Arrhythmia'),
+(27, 27, 28, '2025-06-11', 'Cardiac screening', 'Society size painting should teacher table enjoy.', 'Infection'),
+(28, 28, 28, '2025-06-18', 'Fracture assessment', 'Happy personal suffer theory owner glass real.', 'Suspected fracture'),
+(29, 29, 18, '2025-06-08', 'Minor surgery', 'Media able family her contain for.', 'Infection'),
+(30, 30, 2, '2025-06-10', 'Appendectomy', 'What move human question court reveal interview lose.', 'Hypertension');
 
 -- Billing summary Data
 INSERT INTO Billing (B_ID, P_ID, Date, TotalCost) VALUES
-(1, 1, '2024-06-16', 75.00),    
-(2, 3, '2024-06-21', 120.00),
-(3, 5, '2024-06-15', 60.00),
-(4, 6, '2024-06-23', 90.00),
-(5, 7, '2024-06-24', 250.00),
-(6, 8, '2024-06-25', 50.00);
+(1, 1, '2025-06-20', 72.89),
+(2, 2, '2025-06-19', 249.97),
+(3, 3, '2025-06-19', 118.55),
+(4, 4, '2025-06-14', 423.56),
+(5, 5, '2025-06-17', 276.45),
+(6, 6, '2025-06-13', 374.14),
+(7, 7, '2025-06-16', 460.92),
+(8, 8, '2025-06-21', 369.40),
+(9, 9, '2025-06-13', 121.74),
+(10, 10, '2025-06-22', 189.81),
+(11, 11, '2025-06-20', 454.65),
+(12, 12, '2025-06-21', 86.40),
+(13, 13, '2025-06-14', 356.80),
+(14, 14, '2025-06-22', 442.99),
+(15, 15, '2025-06-15', 102.83),
+(16, 16, '2025-06-17', 438.52),
+(17, 17, '2025-06-15', 329.49),
+(18, 18, '2025-06-14', 168.74),
+(19, 19, '2025-06-14', 148.38),
+(20, 20, '2025-06-21', 467.79),
+(21, 21, '2025-06-20', 435.32),
+(22, 22, '2025-06-14', 33.66),
+(23, 23, '2025-06-16', 67.73),
+(24, 24, '2025-06-14', 429.18),
+(25, 25, '2025-06-13', 61.68),
+(26, 26, '2025-06-17', 220.22),
+(27, 27, '2025-06-13', 371.26),
+(28, 28, '2025-06-16', 341.58),
+(29, 29, '2025-06-17', 185.84),
+(30, 30, '2025-06-14', 85.00);
+
 
 -- List of services available at the hospital
 INSERT INTO Services (Service_ID, Service_Name) VALUES
-(1, 'ECG'),
-(2, 'X-Ray'),
-(3, 'Blood Test'),
-(4, 'Pediatric Vaccine'),
-(5, 'Emergency Scan'),
-(6, 'Blood Pressure Monitoring'),
-(7, 'Appendectomy'),
-(8, 'Child Health Check');
+(1, 'General Checkup'),
+(2, 'Blood Test'),
+(3, 'X-ray'),
+(4, 'MRI Scan'),
+(5, 'CT Scan'),
+(6, 'Vaccination'),
+(7, 'Ultrasound'),
+(8, 'ECG'),
+(9, 'Appendectomy'),
+(10, 'Cardiac Screening'),
+(11, 'Wound Dressing'),
+(12, 'Fracture Assessment'),
+(13, 'Diabetes Consultation'),
+(14, 'Minor Surgery'),
+(15, 'ENT Examination'),
+(16, 'Dermatology Consultation'),
+(17, 'Neurology Test'),
+(18, 'Physical Therapy'),
+(19, 'Pulmonary Function Test'),
+(20, 'Vision Screening');
+
 
 -- Billing details show what services were billed to which patient and who performed them
 INSERT INTO BillingDetails (BillingDetail_ID, B_ID, Service_ID, Performed_By, Quantity, Unit_Cost) VALUES
-(1, 1, 1, 1, 1, 25.00),    
-(2, 1, 2, 1, 2, 50.00),
-(3, 2, 5, 3, 1, 100.00),
-(4, 2, 3, 3, 4, 20.00),
-(5, 3, 4, 4, 3, 60.00),
-(6, 4, 6, 5, 2, 90.00),
-(7, 5, 7, 5, 5, 250.00),
-(8, 6, 8, 6, 6, 50.00);
+(1, 1, 20, 20, 1, 84.65),
+(2, 2, 18, 29, 1, 133.76),
+(3, 3, 19, 10, 1, 37.78),
+(4, 4, 8, 26, 2, 73.66),
+(5, 5, 3, 3, 1, 132.55),
+(6, 6, 8, 15, 1, 42.85),
+(7, 7, 13, 10, 1, 85.10),
+(8, 8, 18, 23, 1, 103.64),
+(9, 9, 18, 19, 2, 112.65),
+(10, 10, 17, 4, 1, 105.62),
+(11, 11, 5, 16, 1, 29.43),
+(12, 12, 15, 24, 1, 130.54),
+(13, 13, 9, 5, 1, 21.92),
+(14, 14, 20, 27, 2, 140.58),
+(15, 15, 11, 5, 1, 139.86),
+(16, 16, 14, 10, 1, 44.58),
+(17, 17, 19, 24, 1, 134.18),
+(18, 18, 13, 12, 1, 118.12),
+(19, 19, 2, 9, 1, 51.15),
+(20, 20, 18, 7, 1, 19.98),
+(21, 21, 7, 28, 2, 33.58),
+(22, 22, 10, 5, 1, 35.83),
+(23, 23, 3, 13, 1, 125.09),
+(24, 24, 14, 24, 1, 115.32),
+(25, 25, 1, 10, 2, 96.41),
+(26, 26, 8, 15, 1, 33.95),
+(27, 27, 10, 10, 1, 117.76),
+(28, 28, 2, 24, 1, 146.98),
+(29, 29, 15, 8, 1, 129.72),
+(30, 30, 12, 10, 1, 132.54);
 
 
+
+-- Set all rooms to available
+UPDATE Rooms SET Availability = 1;
+
+-- Set rooms to unavailable if a patient have no DateOut
+UPDATE Rooms
+SET Availability = 0
+WHERE Room_Num IN 
+(
+    SELECT Room_Num
+    FROM AdmissionStay
+    WHERE DateOut IS NULL
+);
