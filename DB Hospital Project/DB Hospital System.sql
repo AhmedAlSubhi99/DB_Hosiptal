@@ -779,7 +779,318 @@ EXEC sp_AssignDoctorToDepartmentAndShift
     @Shift = 'Evening';
 
 SELECT * FROM Doctors WHERE D_ID = 17;
+GO
+
+
+-- 1. Trigger: AFTER INSERT on AppointmentsLink → Auto insert into MedicalRecords
+
+CREATE TRIGGER trg_AfterAppointment_Insert
+ON AppointmentsLink
+AFTER INSERT
+AS
+BEGIN
+-- Insert a medical record using data from the newly inserted appointment
+INSERT INTO MedicalRecords (MR_ID, P_ID, D_ID, Date, Diagnosis)
+SELECT 
+-- Generate new unique MR_ID by incrementing max existing ID
+(SELECT ISNULL(MAX(MR_ID), 0) + ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) 
+FROM MedicalRecords) AS MR_ID,
+i.P_ID, -- Patient ID from inserted row
+i.D_ID, -- Doctor ID from inserted row
+CAST(i.Ap_DateTime AS DATE), -- Use appointment date for the record
+'Auto-generated from appointment' -- Default placeholder diagnosis
+FROM inserted i; -- Use 'inserted' pseudo-table for trigger context
+END;
+GO
+
+-- 2. Trigger: INSTEAD OF DELETE on Patients → Block if patient has billing
+
+CREATE TRIGGER trg_BlockPatientDeleteIfBillsExist
+ON Patients
+INSTEAD OF DELETE
+AS
+BEGIN
+-- Check if any of the patients to be deleted have related billing records
+IF EXISTS (SELECT 1 FROM Billing B JOIN deleted d ON B.P_ID = d.P_ID)
+BEGIN
+-- Raise an error and stop the deletion
+RAISERROR('Cannot delete patient: pending billing records exist.', 16, 1);
+ROLLBACK TRANSACTION;
+END
+ELSE
+BEGIN
+-- Proceed to delete the patient if no billing exists
+DELETE FROM Patients
+WHERE P_ID IN (SELECT P_ID FROM deleted);
+END
+END;
+GO
+
+-- Trigger 3: AFTER UPDATE on Rooms → Ensure no two patients occupy the same room
+
+DROP TRIGGER IF EXISTS trg_EnsureRoomUniqueness;
+GO
+
+CREATE TRIGGER trg_EnsureRoomUniqueness
+ON AdmissionStay
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    -- Check only the room(s) being inserted/updated
+    IF EXISTS (
+        SELECT Room_Num
+        FROM AdmissionStay
+        WHERE DateOut IS NULL
+          AND Room_Num IN (SELECT Room_Num FROM inserted)
+        GROUP BY Room_Num
+        HAVING COUNT(*) > 1
+    )
+    BEGIN
+        RAISERROR('Room conflict: multiple patients cannot occupy the same room at the same time.', 16, 1);
+        ROLLBACK;
+    END
+END;
+GO
 
 
 
+-- Test Triggers
 
+-- (1)
+INSERT INTO AppointmentsLink (P_ID, D_ID, Ap_DateTime)
+VALUES (1, 3, GETDATE());  -- or use a specific future datetime
+
+SELECT * 
+FROM MedicalRecords 
+WHERE P_ID = 1 AND D_ID = 3 
+ORDER BY MR_ID DESC;
+
+-- (2)
+
+-- Patient 1 has billing (from your DB data)
+DELETE FROM Patients WHERE P_ID = 1;
+
+-- Add test patient (no billing)
+INSERT INTO Patients (P_ID, P_Name, P_Gender, P_DOB, P_Contact_Info)
+VALUES (999, 'Test Patient', 'Male', '1990-01-01', '000000000');
+
+-- Delete it 
+DELETE FROM Patients WHERE P_ID = 999;
+
+-- Verify it
+SELECT * FROM Patients WHERE P_ID = 999;
+
+-- (3)
+-- Test on room 130
+INSERT INTO AdmissionStay (P_ID, Room_Num, DateIn)
+VALUES (1, 130, '2025-06-24'); 
+
+-- this show room conflict 
+INSERT INTO AdmissionStay (P_ID, Room_Num, DateIn)
+VALUES (2, 130, '2025-06-25');
+
+
+
+-- DCL: Security 
+
+-- 1. Create two roles: DoctorUser and AdminUser
+
+CREATE ROLE DoctorUser; -- read-only for doctors
+CREATE ROLE AdminUser; -- insert and update access for admins
+
+-- 2. Grant SELECT permissions to DoctorUser
+
+-- This allows doctors to view data from key tables
+GRANT SELECT ON Patients TO DoctorUser;
+GRANT SELECT ON AppointmentsLink TO DoctorUser;
+
+-- 3. Grant INSERT and UPDATE permissions to AdminUser on all tables
+
+-- Safely close existing cursor if it already exists
+IF CURSOR_STATUS('global', 'table_cursor') >= -1
+BEGIN
+    CLOSE table_cursor;
+    DEALLOCATE table_cursor;
+END
+-- Declare a variable to store table names
+DECLARE @TableName NVARCHAR(128);
+-- Declare a cursor to loop through all user tables
+DECLARE table_cursor CURSOR FOR
+SELECT name FROM sys.tables WHERE type = 'U';  -- 'U' = user-defined table
+-- Open the cursor
+OPEN table_cursor;
+FETCH NEXT FROM table_cursor INTO @TableName;
+-- Loop through tables and grant permissions
+WHILE @@FETCH_STATUS = 0
+BEGIN
+-- Dynamically build and execute GRANT statement for AdminUser
+EXEC('GRANT INSERT, UPDATE ON [' + @TableName + '] TO AdminUser');
+-- Move to next table
+FETCH NEXT FROM table_cursor INTO @TableName;
+END
+-- Close and clean up the cursor
+CLOSE table_cursor;
+DEALLOCATE table_cursor;
+
+-- 4. Revoke DELETE permission on Doctors table from AdminUser
+
+-- This ensures doctor records cannot be deleted accidentally
+REVOKE DELETE ON Doctors FROM AdminUser;
+
+
+-- Test DCL
+
+-- (1)
+-- Create SQL Server logins 
+CREATE LOGIN DoctorTestLogin WITH PASSWORD = 'Dr@12345';
+CREATE LOGIN AdminTestLogin  WITH PASSWORD = 'Adm@12345';
+
+-- Create two test users
+CREATE USER DoctorTest FOR LOGIN DoctorTestLogin;
+CREATE USER AdminTest FOR LOGIN AdminTestLogin;
+
+-- Assign roles
+EXEC sp_addrolemember 'DoctorUser', 'DoctorTest';
+EXEC sp_addrolemember 'AdminUser', 'AdminTest';
+
+-- (2)
+
+-- As DoctorTest user:
+EXECUTE AS USER = 'DoctorTest';
+
+-- it should return data
+SELECT TOP 1 * FROM Patients;
+SELECT TOP 1 * FROM AppointmentsLink;
+
+-- it Should Fail
+INSERT INTO Patients (P_ID, P_Name, P_Gender, P_DOB, P_Contact_Info)
+VALUES (999, 'Blocked Patient', 'Male', '1990-01-01', '0000');
+REVERT;  -- End impersonation
+
+-- (3)
+
+-- As AdminTest user:
+EXECUTE AS USER = 'AdminTest';
+
+-- Try inserting into Doctors (should succeed)
+INSERT INTO Doctors (D_ID, D_Name, D_Gender, D_Specialization, D_Contact_Info, De_ID, ManagedBy, Shift)
+VALUES (999, 'Test Admin Doctor', 'Male', 'Testing', 'test@hospital.om', 1, 1, 'Day');
+
+-- Try updating a patient
+UPDATE Patients SET P_Contact_Info = 'new@email.com' WHERE P_ID = 1;
+
+REVERT; --FOR REVERT
+
+-- (4)
+
+-- As AdminTest user:
+EXECUTE AS USER = 'AdminTest';
+
+-- This should FAIL
+DELETE FROM Doctors WHERE D_ID = 999;
+
+REVERT;
+
+-- ========================================
+-- TCL 1: Admit a Patient and Generate Billing
+-- ========================================
+BEGIN TRANSACTION;
+BEGIN TRY
+    INSERT INTO Patients (P_ID, P_Name, P_Gender, P_DOB, P_Contact_Info)
+    VALUES (101, 'Mohammed Al-Mamari', 'Male', '1995-04-10', 'mohammed@om');
+
+    INSERT INTO AdmissionStay (P_ID, Room_Num, DateIn)
+    VALUES (101, 130, GETDATE());
+
+    UPDATE Rooms SET Occupied = 1 WHERE Room_Num = 130;
+
+    INSERT INTO Billing (Bill_ID, P_ID, Amount, Description, Bill_Date)
+    VALUES (501, 101, 80.000, 'Admission charges', GETDATE());
+
+    COMMIT;
+    PRINT '✅ TCL 1: Admission and billing committed.';
+END TRY
+BEGIN CATCH
+    ROLLBACK;
+    PRINT '❌ TCL 1 Failed. Rolled back.';
+    PRINT ERROR_MESSAGE();
+END CATCH;
+
+-- ========================================
+-- TCL 2: Update Patient Contact Info
+-- ========================================
+BEGIN TRANSACTION;
+BEGIN TRY
+    UPDATE Patients
+    SET P_Contact_Info = 'updated@email.om'
+    WHERE P_ID = 101;
+
+    PRINT 'ℹ️ TCL 2: Contact info updated by user: ' + SYSTEM_USER;
+    COMMIT;
+    PRINT '✅ TCL 2: Contact update committed.';
+END TRY
+BEGIN CATCH
+    ROLLBACK;
+    PRINT '❌ TCL 2 Failed. Rolled back.';
+    PRINT ERROR_MESSAGE();
+END CATCH;
+
+-- ========================================
+-- TCL 3: Book Multiple Appointments (No Ap_ID)
+-- ========================================
+BEGIN TRANSACTION;
+BEGIN TRY
+    INSERT INTO AppointmentsLink (P_ID, D_ID, Ap_DateTime)
+    VALUES (101, 3, '2025-06-26 09:00');
+
+    INSERT INTO AppointmentsLink (P_ID, D_ID, Ap_DateTime)
+    VALUES (101, 5, '2025-06-26 11:00');
+
+    COMMIT;
+    PRINT '✅ TCL 3: Appointments booked.';
+END TRY
+BEGIN CATCH
+    ROLLBACK;
+    PRINT '❌ TCL 3 Failed. Rolled back.';
+    PRINT ERROR_MESSAGE();
+END CATCH;
+
+-- ========================================
+-- TCL 4: Discharge Patient and Update Room
+-- ========================================
+BEGIN TRANSACTION;
+BEGIN TRY
+    UPDATE AdmissionStay
+    SET DateOut = GETDATE()
+    WHERE P_ID = 101 AND DateOut IS NULL;
+
+    UPDATE Rooms
+    SET Occupied = 0
+    WHERE Room_Num = 130;
+
+    COMMIT;
+    PRINT '✅ TCL 4: Patient discharged and room freed.';
+END TRY
+BEGIN CATCH
+    ROLLBACK;
+    PRINT '❌ TCL 4 Failed. Rolled back.';
+    PRINT ERROR_MESSAGE();
+END CATCH;
+
+-- ========================================
+-- TCL 5: Cancel Overcharged Billing
+-- ========================================
+BEGIN TRANSACTION;
+BEGIN TRY
+    DELETE FROM Billing
+    WHERE Bill_ID = 501 AND Amount > 500;
+
+    PRINT 'ℹ️ TCL 5: Billing above 500 removed by ' + SYSTEM_USER;
+    COMMIT;
+    PRINT '✅ TCL 5: Billing removed.';
+END TRY
+BEGIN CATCH
+    ROLLBACK;
+    PRINT '❌ TCL 5 Failed. Rolled back.';
+    PRINT ERROR_MESSAGE();
+END CATCH;
