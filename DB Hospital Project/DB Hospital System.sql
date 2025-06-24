@@ -19,8 +19,9 @@ CREATE TABLE Departments
 );
 GO
 
--- Staff table first
-CREATE TABLE Staff (
+-- Staff table 
+CREATE TABLE Staff
+(
     S_ID INT PRIMARY KEY,
     S_Name VARCHAR(100) NOT NULL,
     Role VARCHAR(50) CHECK (Role IN ('Nurse', 'Admin', 'Technician', 'Receptionist')),
@@ -31,8 +32,9 @@ CREATE TABLE Staff (
 );
 GO
 
--- Doctors table second
-CREATE TABLE Doctors (
+-- Doctors table 
+CREATE TABLE Doctors 
+(
     D_ID INT PRIMARY KEY,
     D_Name VARCHAR(100) NOT NULL,
     D_Gender VARCHAR(10) CHECK (D_Gender IN ('Male', 'Female', 'Other')),
@@ -44,18 +46,6 @@ CREATE TABLE Doctors (
     FOREIGN KEY (ManagedBy) REFERENCES Staff(S_ID)
 );
 GO
-
--- Add FK to Staff AFTER Doctors exists
-ALTER TABLE Staff
-ADD CONSTRAINT FK_Staff_SuperviseBy FOREIGN KEY (SuperviseBy) REFERENCES Doctors(D_ID);
-GO
-
-ALTER TABLE Doctors
-ADD Shift VARCHAR(50) DEFAULT 'Day';
-
-UPDATE Doctors
-SET Shift = 'Day'
-WHERE Shift IS NULL;
 
 -- Users table
 CREATE TABLE Users 
@@ -153,6 +143,19 @@ CREATE TABLE AppointmentsLink
     FOREIGN KEY (D_ID) REFERENCES Doctors(D_ID) -- FK to Doctors
 );
 GO
+
+-- Add FK to Staff AFTER Doctors exists
+ALTER TABLE Staff
+ADD CONSTRAINT FK_Staff_SuperviseBy FOREIGN KEY (SuperviseBy) REFERENCES Doctors(D_ID);
+GO
+
+ALTER TABLE Doctors
+ADD Shift VARCHAR(50) DEFAULT 'Day';
+
+UPDATE Doctors
+SET Shift = 'Day'
+WHERE Shift IS NULL;
+
 
 
 -- Insert patients with names, genders, DOBs, and contact numbers
@@ -828,9 +831,6 @@ GO
 
 -- Trigger 3: AFTER UPDATE on Rooms → Ensure no two patients occupy the same room
 
-DROP TRIGGER IF EXISTS trg_EnsureRoomUniqueness;
-GO
-
 CREATE TRIGGER trg_EnsureRoomUniqueness
 ON AdmissionStay
 AFTER INSERT, UPDATE
@@ -965,6 +965,7 @@ SELECT TOP 1 * FROM AppointmentsLink;
 -- it Should Fail
 INSERT INTO Patients (P_ID, P_Name, P_Gender, P_DOB, P_Contact_Info)
 VALUES (999, 'Blocked Patient', 'Male', '1990-01-01', '0000');
+
 REVERT;  -- End impersonation
 
 -- (3)
@@ -975,6 +976,8 @@ EXECUTE AS USER = 'AdminTest';
 -- Try inserting into Doctors (should succeed)
 INSERT INTO Doctors (D_ID, D_Name, D_Gender, D_Specialization, D_Contact_Info, De_ID, ManagedBy, Shift)
 VALUES (999, 'Test Admin Doctor', 'Male', 'Testing', 'test@hospital.om', 1, 1, 'Day');
+
+REVERT; --FOR REVERT
 
 -- Try updating a patient
 UPDATE Patients SET P_Contact_Info = 'new@email.com' WHERE P_ID = 1;
@@ -991,106 +994,387 @@ DELETE FROM Doctors WHERE D_ID = 999;
 
 REVERT;
 
--- ========================================
 -- TCL 1: Admit a Patient and Generate Billing
--- ========================================
-BEGIN TRANSACTION;
+
+BEGIN TRANSACTION; -- Start transaction
 BEGIN TRY
-    INSERT INTO Patients (P_ID, P_Name, P_Gender, P_DOB, P_Contact_Info)
-    VALUES (101, 'Mohammed Al-Mamari', 'Male', '1995-04-10', 'mohammed@om');
+INSERT INTO Patients (P_ID, P_Name, P_Gender, P_DOB, P_Contact_Info) -- Add a new patient
+VALUES (101, 'Mohammed Al-Mamari', 'Male', '1995-04-10', 'mohammed@om');
 
-    INSERT INTO AdmissionStay (P_ID, Room_Num, DateIn)
-    VALUES (101, 130, GETDATE());
+INSERT INTO AdmissionStay (P_ID, Room_Num, DateIn) -- Register their room admission
+VALUES (101, 130, GETDATE());
 
-    UPDATE Rooms SET Occupied = 1 WHERE Room_Num = 130;
+UPDATE Rooms SET Availability = 1 WHERE Room_Num = 130;  -- Mark room as occupied (Availability = 1)
 
-    INSERT INTO Billing (Bill_ID, P_ID, Amount, Description, Bill_Date)
-    VALUES (501, 101, 80.000, 'Admission charges', GETDATE());
+INSERT INTO Billing (B_ID, P_ID, TotalCost, Date)  -- Generate billing record
+VALUES (501, 101, 80.000, GETDATE());
 
-    COMMIT;
-    PRINT '✅ TCL 1: Admission and billing committed.';
+COMMIT;   -- Commit all if successful
+PRINT 'Admission and billing committed.';
 END TRY
 BEGIN CATCH
-    ROLLBACK;
-    PRINT '❌ TCL 1 Failed. Rolled back.';
-    PRINT ERROR_MESSAGE();
+
+ROLLBACK;    -- Rollback if any step fails
+PRINT 'Failed. Rolled back.';
+PRINT ERROR_MESSAGE(); -- Show the error
 END CATCH;
 
--- ========================================
+
 -- TCL 2: Update Patient Contact Info
--- ========================================
+
 BEGIN TRANSACTION;
 BEGIN TRY
-    UPDATE Patients
-    SET P_Contact_Info = 'updated@email.om'
-    WHERE P_ID = 101;
 
-    PRINT 'ℹ️ TCL 2: Contact info updated by user: ' + SYSTEM_USER;
-    COMMIT;
-    PRINT '✅ TCL 2: Contact update committed.';
+UPDATE Patients -- Update the patient's email/contact info
+SET P_Contact_Info = 'updated@email.om'
+WHERE P_ID = 101;
+
+PRINT 'Contact info updated by user: ' + SYSTEM_USER;  -- Show which user did the update
+
+COMMIT;  -- Commit the update
+PRINT 'Contact update committed.';
 END TRY
 BEGIN CATCH
-    ROLLBACK;
-    PRINT '❌ TCL 2 Failed. Rolled back.';
-    PRINT ERROR_MESSAGE();
+
+ROLLBACK; -- Rollback on error
+PRINT 'Failed. Rolled back.';
+PRINT ERROR_MESSAGE();
 END CATCH;
 
--- ========================================
--- TCL 3: Book Multiple Appointments (No Ap_ID)
--- ========================================
+-- TCL 3: Book Multiple Appointments 
+
 BEGIN TRANSACTION;
 BEGIN TRY
-    INSERT INTO AppointmentsLink (P_ID, D_ID, Ap_DateTime)
-    VALUES (101, 3, '2025-06-26 09:00');
 
-    INSERT INTO AppointmentsLink (P_ID, D_ID, Ap_DateTime)
-    VALUES (101, 5, '2025-06-26 11:00');
+INSERT INTO AppointmentsLink (P_ID, D_ID, Ap_DateTime) -- Book first appointment
+VALUES (101, 3, '2025-06-26 09:00');
 
-    COMMIT;
-    PRINT '✅ TCL 3: Appointments booked.';
+INSERT INTO AppointmentsLink (P_ID, D_ID, Ap_DateTime) -- Book second appointment
+VALUES (101, 5, '2025-06-26 11:00');
+
+COMMIT;   -- Commit both bookings
+PRINT 'Appointments booked.';
 END TRY
 BEGIN CATCH
-    ROLLBACK;
-    PRINT '❌ TCL 3 Failed. Rolled back.';
-    PRINT ERROR_MESSAGE();
+
+ROLLBACK; -- Cancel both if one fails
+PRINT 'Failed. Rolled back.';
+PRINT ERROR_MESSAGE();
 END CATCH;
 
--- ========================================
+
 -- TCL 4: Discharge Patient and Update Room
--- ========================================
+
 BEGIN TRANSACTION;
 BEGIN TRY
-    UPDATE AdmissionStay
-    SET DateOut = GETDATE()
-    WHERE P_ID = 101 AND DateOut IS NULL;
 
-    UPDATE Rooms
-    SET Occupied = 0
-    WHERE Room_Num = 130;
+UPDATE AdmissionStay -- Set discharge date
+SET DateOut = GETDATE()
+WHERE P_ID = 101 AND DateOut IS NULL;
 
-    COMMIT;
-    PRINT '✅ TCL 4: Patient discharged and room freed.';
+UPDATE Rooms  -- Mark the room as available
+SET Availability = 0
+WHERE Room_Num = 130;
+
+COMMIT; -- Commit changes
+PRINT 'Patient discharged and room freed.';
 END TRY
 BEGIN CATCH
-    ROLLBACK;
-    PRINT '❌ TCL 4 Failed. Rolled back.';
-    PRINT ERROR_MESSAGE();
+
+ROLLBACK; -- Rollback if either step fails
+PRINT 'Failed. Rolled back.';
+PRINT ERROR_MESSAGE();
 END CATCH;
 
--- ========================================
 -- TCL 5: Cancel Overcharged Billing
--- ========================================
+
 BEGIN TRANSACTION;
 BEGIN TRY
-    DELETE FROM Billing
-    WHERE Bill_ID = 501 AND Amount > 500;
 
-    PRINT 'ℹ️ TCL 5: Billing above 500 removed by ' + SYSTEM_USER;
-    COMMIT;
-    PRINT '✅ TCL 5: Billing removed.';
+DELETE FROM Billing  -- Delete billing if amount is over 500
+WHERE B_ID = 501 AND TotalCost > 500;
+
+PRINT 'Billing above 500 removed by ' + SYSTEM_USER;  -- Show who removed the billing
+
+COMMIT;  -- Commit deletion
+PRINT 'Billing removed.';
 END TRY
 BEGIN CATCH
-    ROLLBACK;
-    PRINT '❌ TCL 5 Failed. Rolled back.';
-    PRINT ERROR_MESSAGE();
+
+ROLLBACK;   -- Undo delete if error occurs
+PRINT 'Failed. Rolled back.';
+PRINT ERROR_MESSAGE();
 END CATCH;
+GO
+
+-- Views
+
+CREATE VIEW vw_DoctorSchedule 
+AS
+SELECT d.D_ID, d.D_Name, a.P_ID, p.P_Name, a.Ap_DateTime
+FROM AppointmentsLink a -- From appointment table
+JOIN Doctors d ON a.D_ID = d.D_ID   -- Match with doctors
+JOIN Patients p ON a.P_ID = p.P_ID -- Match with patients
+WHERE a.Ap_DateTime > GETDATE();  -- Only future appointments
+Go
+
+
+
+
+CREATE VIEW vw_PatientSummary AS
+SELECT p.P_ID, p.P_Name, p.P_Gender, p.P_DOB, p.P_Contact_Info, MAX(a.Ap_DateTime) AS LatestVisit  
+FROM Patients p
+LEFT JOIN AppointmentsLink a ON p.P_ID = a.P_ID  -- Match appointments if available
+GROUP BY p.P_ID, p.P_Name, p.P_Gender, p.P_DOB, p.P_Contact_Info; -- Group by patient
+GO
+
+CREATE VIEW vw_DepartmentStats AS
+SELECT dept.De_ID, dept.De_Name, COUNT(DISTINCT doc.D_ID) AS TotalDoctors, COUNT(DISTINCT a.P_ID) AS TotalPatients     
+FROM Departments dept
+LEFT JOIN Doctors doc ON dept.De_ID = doc.De_ID        -- Link doctors to departments
+LEFT JOIN AppointmentsLink a ON doc.D_ID = a.D_ID      -- Link patients via appointments to doctors
+GROUP BY dept.De_ID, dept.De_Name;                     -- Group per department
+GO
+
+-- For Display the Views
+SELECT * FROM vw_DoctorSchedule;
+
+SELECT * FROM vw_PatientSummary;
+
+SELECT * FROM vw_DepartmentStats;
+
+-- SQL Job Agent
+
+-- Daily Backup Job 
+EXEC msdb.dbo.sp_delete_job  
+    @job_name = N'Daily_HospitalDB_Backup';
+
+-- Create the backup job
+EXEC msdb.dbo.sp_add_job  
+    @job_name = N'Daily_HospitalDB_Backup',  
+    @enabled = 1,  
+    @description = N'Daily backup of HospitalProject DB to default MSSQL backup folder.',  
+    @category_name = N'[Uncategorized (Local)]';
+
+-- Add job step: perform the backup to specified path
+EXEC msdb.dbo.sp_add_jobstep  
+    @job_name = N'Daily_HospitalDB_Backup',
+    @step_name = N'Backup Hospital DB',
+    @subsystem = N'TSQL',
+    @command = N'
+        BACKUP DATABASE HospitalProject
+        TO DISK = ''C:\Backup\HospitalProject_Test.bak'' + 
+                  CONVERT(VARCHAR(10), GETDATE(), 120) + ''.bak''
+        WITH INIT, FORMAT;',
+    @on_success_action = 1;
+
+-- Create schedule to run daily at 12:00 AM
+EXEC msdb.dbo.sp_add_schedule  
+    @schedule_name = N'Daily_12AM_Backup_Schedule',  
+    @freq_type = 4,               -- Daily
+    @freq_interval = 1,          -- Every day
+    @active_start_time = 120000; -- 11:00 AM
+
+-- Attach schedule to the job
+EXEC msdb.dbo.sp_attach_schedule  
+    @job_name = N'Daily_HospitalDB_Backup',  
+    @schedule_name = N'Daily_12AM_Backup_Schedule';
+
+-- Register job with SQL Server Agent
+EXEC msdb.dbo.sp_add_jobserver  
+    @job_name = N'Daily_HospitalDB_Backup',
+    @server_name = @@SERVERNAME;
+
+--  Doctor Schedule Report
+
+-- Create a table to log the daily doctor schedule
+CREATE TABLE DoctorDailyScheduleLog 
+(
+    LogID INT IDENTITY(1,1) PRIMARY KEY,       -- Auto-increment log ID
+    D_ID INT,                                  -- Doctor ID
+    D_Name NVARCHAR(100),                      -- Doctor Name
+    P_ID INT,                                  -- Patient ID
+    P_Name NVARCHAR(100),                      -- Patient Name
+    Ap_DateTime DATETIME,                      -- Appointment DateTime
+    LoggedAt DATETIME DEFAULT GETDATE()        -- Timestamp when the log was recorded
+);
+GO
+
+-- Create a stored procedure that logs today's appointments
+CREATE PROCEDURE sp_LogDoctorSchedule
+AS
+BEGIN
+-- Insert today appointments into the log table
+INSERT INTO DoctorDailyScheduleLog (D_ID, D_Name, P_ID, P_Name, Ap_DateTime)
+SELECT d.D_ID, d.D_Name, p.P_ID, p.P_Name, a.Ap_DateTime                         
+FROM AppointmentsLink a
+JOIN Doctors d ON a.D_ID = d.D_ID          -- Join to get doctor info
+JOIN Patients p ON a.P_ID = p.P_ID         -- Join to get patient info
+WHERE CAST(a.Ap_DateTime AS DATE) = CAST(GETDATE() AS DATE);  -- Only for today appointments
+END;
+GO
+
+-- Create the SQL Agent Job to automate the procedure
+EXEC msdb.dbo.sp_add_job  
+    @job_name = N'Doctor_Daily_Schedule_Report',       -- Job name (N is related for Unicode String)
+    @enabled = 1,                                      -- Enable the job
+    @description = N'Logs daily doctor appointment schedule.';  -- Job description
+GO
+
+-- Add a step to the job that calls the procedure
+EXEC msdb.dbo.sp_add_jobstep  
+    @job_name = N'Doctor_Daily_Schedule_Report',       -- Target job name
+    @step_name = N'Run sp_LogDoctorSchedule',          -- Step name
+    @subsystem = N'TSQL',                              -- Type of command
+    @command = N'EXEC sp_LogDoctorSchedule',           -- Command to run
+    @database_name = N'HospitalProject';               -- Target database
+GO
+
+-- Create a daily schedule that runs at 07:00 AM
+EXEC msdb.dbo.sp_add_schedule  
+    @schedule_name = N'Daily_11AM_Schedule',            -- Schedule name
+    @freq_type = 4,                                    -- Frequency type: daily
+    @freq_interval = 1,                                -- Every day
+    @active_start_time = 070000;                       -- Start time: 11:00 AM
+GO
+
+-- Attach the schedule to the job
+EXEC msdb.dbo.sp_attach_schedule  
+    @job_name = N'Doctor_Daily_Schedule_Report',       -- Job name 
+    @schedule_name = N'Daily_7AM_Schedule';            -- Schedule name
+GO
+
+-- Register the job with the SQL Server Agent
+EXEC msdb.dbo.sp_add_jobserver  
+    @job_name = N'Doctor_Daily_Schedule_Report',       -- Job name
+    @server_name = @@SERVERNAME;                       -- Automatically fetch local server name
+GO
+
+-- For Verify the SQL Job Work
+
+-- Run the job for testing
+EXEC msdb.dbo.sp_start_job N'Daily_HospitalDB_Backup';
+
+
+-- Run the procedure manually
+EXEC sp_LogDoctorSchedule;
+
+-- Check log entries
+SELECT * FROM DoctorDailyScheduleLog
+WHERE CAST(LoggedAt AS DATE) = CAST(GETDATE() AS DATE);
+
+-- Check if log was inserted
+SELECT TOP 5 * FROM DoctorDailyScheduleLog ORDER BY LoggedAt DESC;
+GO
+
+-- Bouns Task
+
+-- Alert Email + Export Billing via Agent
+
+-- 1. Create Procedure: Alert if any doctor has >10 appointments today
+
+CREATE PROCEDURE sp_AlertDoctorsOverload
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF EXISTS (
+        SELECT D_ID
+        FROM AppointmentsLink
+        WHERE CAST(Ap_DateTime AS DATE) = CAST(GETDATE() AS DATE)
+        GROUP BY D_ID
+        HAVING COUNT(*) > 10
+    )
+    BEGIN
+        EXEC msdb.dbo.sp_send_dbmail
+            @profile_name = 'HospitalMailProfile',  
+            @recipients = 'ahmed.b@hospital.om',
+            @subject = 'Doctor Appointment Overload',
+            @body = 'One or more doctors have over 5 appointments today.';
+    END
+END;
+GO
+
+-- SQL Agent Job 1: Email Alert
+EXEC msdb.dbo.sp_delete_job  
+    @job_name = N'Doctor_Overload_Email_Alert';
+
+-- Run these in a new query window as separate batch
+EXEC sp_configure 'show advanced options', 1;
+RECONFIGURE;
+EXEC sp_configure 'Database Mail XPs', 1;
+RECONFIGURE;
+
+EXEC msdb.dbo.sp_add_job  
+    @job_name = N'Doctor_Overload_Email_Alert';
+
+EXEC msdb.dbo.sp_add_jobstep  
+    @job_name = N'Doctor_Overload_Email_Alert',
+    @step_name = N'Send Overload Email',
+    @subsystem = N'TSQL',
+    @command = N'EXEC sp_AlertDoctorsOverload';
+
+EXEC msdb.dbo.sp_add_schedule  
+    @schedule_name = N'Daily_11:30AM_Email_Alert',
+    @freq_type = 4,  -- Daily
+    @freq_interval = 1,
+    @active_start_time = 113000;  -- 11:30 AM
+
+EXEC msdb.dbo.sp_attach_schedule  
+    @job_name = N'Doctor_Overload_Email_Alert',
+    @schedule_name = N'Daily_11:30AM_Email_Alert';
+
+EXEC msdb.dbo.sp_add_jobserver  
+    @job_name = N'Doctor_Overload_Email_Alert',  
+    @server_name = @@SERVERNAME;
+
+
+
+-- SQL Agent Job 2: Weekly Billing Export
+
+EXEC msdb.dbo.sp_add_job  
+    @job_name = N'Weekly_Billing_Export_CSV';
+
+EXEC msdb.dbo.sp_add_jobstep  
+    @job_name = N'Weekly_Billing_Export_CSV',
+    @step_name = N'Export Billing Data',
+    @subsystem = N'CmdExec',
+    @command = N'bcp "SELECT * FROM HospitalProject.dbo.Billing" queryout "C:\Exports\BillingSummary.csv" -c -t, -T -S DESKTOP-35G8EDD';
+
+EXEC msdb.dbo.sp_add_schedule  
+    @schedule_name = N'Weekly_Export_Sunday_8PM',
+    @freq_type = 8, -- Weekly
+    @freq_interval = 1,
+	@freq_recurrence_factor = 1,  -- Every 1 week
+    @active_start_time = 200000,  -- 8:00 PM
+    @active_start_date = 20250624  
+
+
+EXEC msdb.dbo.sp_attach_schedule  
+    @job_name = N'Weekly_Billing_Export_CSV',
+    @schedule_name = N'Weekly_Export_Sunday_8PM';
+
+EXEC msdb.dbo.sp_add_jobserver  
+    @job_name = N'Weekly_Billing_Export_CSV',
+    @server_name = @@SERVERNAME;
+
+
+
+-- Testing Bouns Task
+
+-- Insert 11 unique appointments for Doctor 3 and Patient 1 (1-minute apart)
+DECLARE @i INT = 1;
+WHILE @i <= 11
+BEGIN
+    INSERT INTO AppointmentsLink (P_ID, D_ID, Ap_DateTime)
+    VALUES (1, 3, DATEADD(MINUTE, @i, GETDATE()));  -- make each datetime unique
+    
+    SET @i = @i + 1;
+END
+
+
+EXEC msdb.dbo.sp_start_job @job_name = 'Doctor_Overload_Email_Alert';
+
+EXEC msdb.dbo.sp_start_job @job_name = 'Weekly_Billing_Export_CSV';
+
+EXEC msdb.dbo.sp_help_jobhistory 
+    @job_name = 'Doctor_Overload_Email_Alert';  
