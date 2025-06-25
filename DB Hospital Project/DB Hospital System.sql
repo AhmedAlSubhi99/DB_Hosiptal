@@ -937,7 +937,6 @@ DEALLOCATE table_cursor;
 -- This ensures doctor records cannot be deleted accidentally
 REVOKE DELETE ON Doctors FROM AdminUser;
 
-
 -- Test DCL
 
 -- (1)
@@ -1221,18 +1220,18 @@ EXEC msdb.dbo.sp_add_job
     @description = N'Logs daily doctor appointment schedule.';  -- Job description
 GO
 
--- Add a step to the job that calls the procedure
+-- Add step to the job that calls the procedure
 EXEC msdb.dbo.sp_add_jobstep  
-    @job_name = N'Doctor_Daily_Schedule_Report',       -- Target job name
+    @job_name = N'Doctor_Daily_Schedule_Report',       -- Job name
     @step_name = N'Run sp_LogDoctorSchedule',          -- Step name
     @subsystem = N'TSQL',                              -- Type of command
     @command = N'EXEC sp_LogDoctorSchedule',           -- Command to run
-    @database_name = N'HospitalProject';               -- Target database
+    @database_name = N'HospitalProject';               -- Database
 GO
 
 -- Create a daily schedule that runs at 07:00 AM
 EXEC msdb.dbo.sp_add_schedule  
-    @schedule_name = N'Daily_11AM_Schedule',            -- Schedule name
+    @schedule_name = N'Daily_11AM_Schedule',           -- Schedule name
     @freq_type = 4,                                    -- Frequency type: daily
     @freq_interval = 1,                                -- Every day
     @active_start_time = 070000;                       -- Start time: 11:00 AM
@@ -1276,84 +1275,84 @@ GO
 CREATE PROCEDURE sp_AlertDoctorsOverload
 AS
 BEGIN
-    SET NOCOUNT ON;
+    SET NOCOUNT ON; -- Avoid extra results from interfering with procedure results
     IF EXISTS (
         SELECT D_ID
         FROM AppointmentsLink
         WHERE CAST(Ap_DateTime AS DATE) = CAST(GETDATE() AS DATE)
         GROUP BY D_ID
-        HAVING COUNT(*) > 10
+        HAVING COUNT(*) > 10 -- Check for doctors with more than 10 appointments
     )
     BEGIN
-        EXEC msdb.dbo.sp_send_dbmail
-            @profile_name = 'HospitalMailProfile',  
-            @recipients = 'ahmed.b@hospital.om',
-            @subject = 'Doctor Appointment Overload',
-            @body = 'One or more doctors have over 5 appointments today.';
+        EXEC msdb.dbo.sp_send_dbmail  -- Use Database Mail to send an email
+            @profile_name = 'HospitalMailProfile',  -- Configured mail profile
+            @recipients = 'ahmed.b@hospital.om',   -- Email Doctor
+            @subject = 'Doctor Appointment Overload', -- Subject of the email
+            @body = 'One or more doctors have over 10 appointments today.'; -- Message body
     END
 END;
 GO
 
 -- SQL Agent Job 1: Email Alert
-EXEC msdb.dbo.sp_delete_job  
+EXEC msdb.dbo.sp_delete_job  -- Remove the job if exists to avoid duplicate job names
     @job_name = N'Doctor_Overload_Email_Alert';
 
--- Run these in a new query window as separate batch
-EXEC sp_configure 'show advanced options', 1;
+
+EXEC sp_configure 'show advanced options', 1; -- Enable advanced configuration options
 RECONFIGURE;
-EXEC sp_configure 'Database Mail XPs', 1;
+EXEC sp_configure 'Database Mail XPs', 1; -- Enable Database Mail extended stored procedures needed for sp_send_dbmail
 RECONFIGURE;
 
-EXEC msdb.dbo.sp_add_job  
+EXEC msdb.dbo.sp_add_job   -- Create new SQL Agent job
     @job_name = N'Doctor_Overload_Email_Alert';
 
-EXEC msdb.dbo.sp_add_jobstep  
-    @job_name = N'Doctor_Overload_Email_Alert',
+EXEC msdb.dbo.sp_add_jobstep  -- Add step to this job that runs the procedure
+    @job_name = N'Doctor_Overload_Email_Alert', 
     @step_name = N'Send Overload Email',
-    @subsystem = N'TSQL',
-    @command = N'EXEC sp_AlertDoctorsOverload';
+    @subsystem = N'TSQL', -- The step runs a T-SQL (Transact-SQL) command
+    @command = N'EXEC sp_AlertDoctorsOverload'; -- The procedure to execute
 
-EXEC msdb.dbo.sp_add_schedule  
+EXEC msdb.dbo.sp_add_schedule  -- Schedule the job to run daily at 11:30 AM
     @schedule_name = N'Daily_11:30AM_Email_Alert',
-    @freq_type = 4,  -- Daily
-    @freq_interval = 1,
-    @active_start_time = 113000;  -- 11:30 AM
+    @freq_type = 4,   -- 4 = Daily
+    @freq_interval = 1,    -- Every day
+    @active_start_time = 113000;  -- Time in HHMMSS (11:30 AM)
 
-EXEC msdb.dbo.sp_attach_schedule  
+EXEC msdb.dbo.sp_attach_schedule   -- Attach the schedule to the job
     @job_name = N'Doctor_Overload_Email_Alert',
     @schedule_name = N'Daily_11:30AM_Email_Alert';
 
-EXEC msdb.dbo.sp_add_jobserver  
+EXEC msdb.dbo.sp_add_jobserver   -- Register the job with the SQL Server Agent
     @job_name = N'Doctor_Overload_Email_Alert',  
-    @server_name = @@SERVERNAME;
+    @server_name = @@SERVERNAME; -- Automatically get the current server name
 
 
 
 -- SQL Agent Job 2: Weekly Billing Export
 
-EXEC msdb.dbo.sp_add_job  
+EXEC msdb.dbo.sp_add_job   -- Create new job that export billing data weekly
     @job_name = N'Weekly_Billing_Export_CSV';
 
-EXEC msdb.dbo.sp_add_jobstep  
+EXEC msdb.dbo.sp_add_jobstep   -- Add step that runs command-line BCP(bulk copy) export to CSV (bcp exports the entire Billing table to .csv file)
     @job_name = N'Weekly_Billing_Export_CSV',
     @step_name = N'Export Billing Data',
-    @subsystem = N'CmdExec',
-    @command = N'bcp "SELECT * FROM HospitalProject.dbo.Billing" queryout "C:\Exports\BillingSummary.csv" -c -t, -T -S DESKTOP-35G8EDD';
+    @subsystem = N'CmdExec', -- This runs a system command (not T-SQL)
+    @command = N'bcp "SELECT * FROM HospitalProject.dbo.Billing" queryout "C:\Exports\BillingSummary.csv" -c -t, -T -S DESKTOP-35G8EDD'; -- -c: character format-t,: comma -T: trusted connection -S: your server name
 
-EXEC msdb.dbo.sp_add_schedule  
+EXEC msdb.dbo.sp_add_schedule  -- Create weekly schedule for Sunday 8:00 PM
     @schedule_name = N'Weekly_Export_Sunday_8PM',
     @freq_type = 8, -- Weekly
-    @freq_interval = 1,
-	@freq_recurrence_factor = 1,  -- Every 1 week
+    @freq_interval = 1, -- Every Sunday
+	@freq_recurrence_factor = 1,  -- Every week
     @active_start_time = 200000,  -- 8:00 PM
-    @active_start_date = 20250624  
+    @active_start_date = 20250624   -- Job starts on this date
 
 
-EXEC msdb.dbo.sp_attach_schedule  
+EXEC msdb.dbo.sp_attach_schedule   -- Attach the schedule to the export job
     @job_name = N'Weekly_Billing_Export_CSV',
     @schedule_name = N'Weekly_Export_Sunday_8PM';
 
-EXEC msdb.dbo.sp_add_jobserver  
+EXEC msdb.dbo.sp_add_jobserver  -- Register the export job with the SQL Server Agent 
     @job_name = N'Weekly_Billing_Export_CSV',
     @server_name = @@SERVERNAME;
 
@@ -1361,20 +1360,22 @@ EXEC msdb.dbo.sp_add_jobserver
 
 -- Testing Bouns Task
 
--- Insert 11 unique appointments for Doctor 3 and Patient 1 (1-minute apart)
+-- Insert 11 unique appointments for Doctor 3 and Patient 1 in 1-minute apart
 DECLARE @i INT = 1;
 WHILE @i <= 11
 BEGIN
     INSERT INTO AppointmentsLink (P_ID, D_ID, Ap_DateTime)
-    VALUES (1, 3, DATEADD(MINUTE, @i, GETDATE()));  -- make each datetime unique
+    VALUES (1, 3, DATEADD(MINUTE, @i, GETDATE()));  -- Each minute adds a new appointment
     
     SET @i = @i + 1;
 END
 
-
+-- Manually start the email alert job for testing
 EXEC msdb.dbo.sp_start_job @job_name = 'Doctor_Overload_Email_Alert';
 
+-- Manually start the export job for testing
 EXEC msdb.dbo.sp_start_job @job_name = 'Weekly_Billing_Export_CSV';
 
+-- View job execution history for the email alert job
 EXEC msdb.dbo.sp_help_jobhistory 
     @job_name = 'Doctor_Overload_Email_Alert';  
